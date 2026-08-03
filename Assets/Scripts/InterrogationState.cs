@@ -11,7 +11,12 @@ namespace Interrogation
 
     public enum Mood { COLD, PROBING, PRESSING, CLOSING }
 
-    public enum Outcome { ONGOING, RELEASED, CONVICTED_THEFT, SEIZED_SUBVERSION, TOTAL_LOSS }
+    /// <summary>
+    /// HELD는 D1 이후 추가됐다 (규칙 4의 예외).
+    /// 턴 상한에 걸렸지만 게이지가 패배선(80) 아래일 때, 승리도 패배도 아닌 상태가 필요했다.
+    /// 이게 없으면 "판이 끝나도 형사는 기억한다"는 재조사 루프를 표현할 수 없다.
+    /// </summary>
+    public enum Outcome { ONGOING, RELEASED, HELD, CONVICTED_THEFT, SEIZED_SUBVERSION, TOTAL_LOSS }
 
     /// <summary>LLM이 채우는 유일한 구조. 판정은 하지 않는다.</summary>
     [Serializable]
@@ -87,8 +92,12 @@ namespace Interrogation
         // --- 임시 밸런싱 값. D6에서 재조정. ---
         public const int LOSE_THRESHOLD = 80;
         public const int WIN_THRESHOLD = 50;
+        public const int TURN_LIMIT = 6;      // 한 판의 길이. D6에서 재조정.
         public const int HIDDEN_MIN_RUNS = 3;
         public const int HIDDEN_MIN_REPEAT = 3;
+
+        /// <summary>이번 턴이 이 판의 마지막인가. 형사의 마무리 대사에 쓴다.</summary>
+        public bool IsLastTurn => turn >= TURN_LIMIT;
 
         public Mood CurrentMood()
         {
@@ -106,6 +115,12 @@ namespace Interrogation
             if (s && v) return Outcome.TOTAL_LOSS;
             if (s) return Outcome.CONVICTED_THEFT;
             if (v) return Outcome.SEIZED_SUBVERSION;
+
+            // 턴 상한에 도달하면 형사가 서류를 덮는다.
+            // 둘 다 50 미만이어야 나갈 수 있다 (D1 승리 조건). 아니면 다시 부른다.
+            if (turn >= TURN_LIMIT)
+                return CanReleaseNow() ? Outcome.RELEASED : Outcome.HELD;
+
             return Outcome.ONGOING;
         }
 
@@ -124,6 +139,19 @@ namespace Interrogation
             flags.silenceCount = 0;
             flags.parseFailCount = 0;
             // statements / contradictions / usedTactics 는 절대 지우지 않는다.
+        }
+
+        /// <summary>
+        /// 이 판의 첫 수가 지난 판들의 첫 수와 같은가.
+        /// "자네는 늘 그렇게 시작하더군" — D4 게이트이자 이 게임이 팔려는 순간이다.
+        /// 판 안의 반복이 아니라 판을 넘는 반복만 본다.
+        /// </summary>
+        public bool OpensTheSameWay(Tactic current, out int timesBefore)
+        {
+            timesBefore = 0;
+            foreach (var u in usedTactics)
+                if (u.turn == 1 && u.run != runCount && u.tactic == current) timesBefore++;
+            return timesBefore > 0;
         }
 
         /// <summary>제4의 벽 엔딩 발동 조건.</summary>

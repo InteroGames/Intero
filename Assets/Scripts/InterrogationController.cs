@@ -117,7 +117,17 @@ namespace Interrogation
             string line;
             var sit = new StringBuilder();
 
-            if (found.Count > 0)
+            // 판을 넘어 같은 수로 시작했는가. 이 게임이 팔려는 순간이므로 다른 무엇보다 앞선다.
+            if (State.turn == 1 && State.OpensTheSameWay(tactic, out int openedBefore))
+            {
+                line = pool.QuoteOpeningRepeat(State.runCount);
+                result.openingRepeat = true;
+                sit.Append($"자네가 이번에도 {TacticName(tactic)}(으)로 취조를 시작했다. ")
+                   .Append($"앞선 {openedBefore}번의 조사에서도 첫마디가 똑같았다. ")
+                   .Append("형사는 그걸 기억하고 있고, 지금 그 사실을 자네에게 알려준다. ")
+                   .Append("자네를 비난하는 게 아니라, 자네를 이해했다는 투로 말한다. ");
+            }
+            else if (found.Count > 0)
             {
                 var c = found[0];
                 line = pool.QuoteContradiction(c);
@@ -160,10 +170,18 @@ namespace Interrogation
         {
             if (!useLlmDialogue || string.IsNullOrEmpty(r.situation)) yield break;
 
+            string closing = r.outcome switch
+            {
+                Outcome.RELEASED => "\n이 조사는 여기서 끝난다. 형사가 서류를 덮고 자네를 내보낸다. 다음 질문을 하지 않는다.",
+                Outcome.HELD => "\n오늘 조사는 여기서 끝난다. 하지만 자네를 놓아주지는 않는다. 다시 부를 것이다. 다음 질문을 하지 않는다.",
+                Outcome.ONGOING when State.IsLastTurn => "\n이 조사가 곧 끝난다는 걸 형사는 알고 있다.",
+                _ => ""
+            };
+
             string situation =
                 $"{r.situation}\n" +
                 $"형사의 지금 태도: {MoodTone(r.moodAfter)}\n" +
-                $"방금 자네가 한 말: \"{input}\"";
+                $"방금 자네가 한 말: \"{input}\"{closing}";
 
             string generated = null;
             yield return llm.Speak(situation, RecentHistory(), s => generated = s);
@@ -269,12 +287,18 @@ namespace Interrogation
             r.repeatQuestion = true;
         }
 
+        /// <summary>이번 판에서 같은 수를 몇 번 썼는지. 게이지 계산과 같은 기준을 쓴다.</summary>
         int CountTactic(Tactic t)
         {
             int c = 0;
-            foreach (var u in State.usedTactics) if (u.tactic == t) c++;
+            foreach (var u in State.usedTactics)
+                if (u.tactic == t && u.run == State.runCount) c++;
             return c;
         }
+
+        public string IntroLine(int i) => pool.Intro.Count > i ? pool.Intro[i] : null;
+        public int IntroLineCount => pool.Intro.Count;
+        public string RunOpening() => pool.PickRunOpening(State.runCount);
 
         public void NextRun()
         {
@@ -288,6 +312,7 @@ namespace Interrogation
         public string beat;          // 대사 직전의 무언 연출. 없으면 null.
         public bool repeatQuestion;  // true면 새 질문 없이 같은 질문을 유지한다
         public bool lineIsQuestion;  // 생성 대사가 다음 질문까지 겸한다
+        public bool openingRepeat;   // 판을 넘어 같은 수로 시작 - D4 게이트
         public string situation;     // 코드가 정한 사실. LLM은 이걸 말투로만 옮긴다.
         public Tactic tactic;
         public int deltaSuspicion, deltaSubversion;

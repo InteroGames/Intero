@@ -14,6 +14,9 @@ namespace Interrogation
         readonly Dictionary<Mood, List<string>> detective = new Dictionary<Mood, List<string>>();
         readonly List<string> contradictionTemplates = new List<string>();
         readonly List<string> repeatTemplates = new List<string>();
+        readonly List<string> openingRepeatTemplates = new List<string>();
+        readonly List<string> introLines = new List<string>();
+        readonly List<string> runOpenings = new List<string>();
 
         public static DialoguePool Load(string json)
         {
@@ -36,14 +39,28 @@ namespace Interrogation
                 p.contradictionTemplates.AddRange(qt["contradiction"].ToObject<List<string>>());
             if (qt?["tactic_repeat"] != null)
                 p.repeatTemplates.AddRange(qt["tactic_repeat"].ToObject<List<string>>());
+            if (qt?["opening_repeat"] != null)
+                p.openingRepeatTemplates.AddRange(qt["opening_repeat"].ToObject<List<string>>());
+
+            if (root["intro"] != null)
+                p.introLines.AddRange(root["intro"].ToObject<List<string>>());
+            if (root["run_opening"] != null)
+                p.runOpenings.AddRange(root["run_opening"].ToObject<List<string>>());
 
             if (p.contradictionTemplates.Count == 0)
                 p.contradictionTemplates.Add("{value_a}라고 했는데. 지금은 {value_b}인가.");
             if (p.repeatTemplates.Count == 0)
                 p.repeatTemplates.Add("또 그 얘긴가.");
+            if (p.openingRepeatTemplates.Count == 0)
+                p.openingRepeatTemplates.Add("자네는 늘 그렇게 시작하더군.");
 
             return p;
         }
+
+        public IReadOnlyList<string> Intro => introLines;
+
+        public string PickRunOpening(int runCount)
+            => runOpenings.Count == 0 ? null : runOpenings[(runCount - 2 + runOpenings.Count) % runOpenings.Count];
 
         public string PickDetective(Mood m, HashSet<string> used)
             => Pick(detective.TryGetValue(m, out var l) ? l : null, used, "…계속하게.");
@@ -61,6 +78,11 @@ namespace Interrogation
 
         public string QuoteTacticRepeat()
             => repeatTemplates[Random.Range(0, repeatTemplates.Count)];
+
+        /// <summary>판을 넘어 같은 수로 시작했을 때만. 이 게임이 팔려는 순간이다.</summary>
+        public string QuoteOpeningRepeat(int runCount)
+            => openingRepeatTemplates[Random.Range(0, openingRepeatTemplates.Count)]
+               .Replace("{times}", runCount.ToString());
 
         static string Pick(List<string> list, HashSet<string> used, string fallbackLine)
         {

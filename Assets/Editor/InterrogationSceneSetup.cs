@@ -34,6 +34,8 @@ namespace Interrogation.EditorTools
         const float PlayerZ = -1.05f; // 주인공 쪽
 
         static TMP_FontAsset koreanFont;
+        static CanvasGroup introGroup;
+        static TMP_Text introTMP;
 
         [MenuItem("Tools/Interrogation/Setup Scene")]
         public static void Setup()
@@ -373,6 +375,36 @@ namespace Interrogation.EditorTools
             dbgTMP.alignment = TextAlignmentOptions.TopLeft;
             dbgTMP.text = "";
 
+            // 오프닝 암전 - 항상 맨 위에 그린다
+            var overlay = NewUI("IntroOverlay", canvasGO.transform, typeof(Image), typeof(CanvasGroup));
+            Stretch(overlay, Vector2.zero, Vector2.zero);
+            overlay.GetComponent<Image>().color = Color.black;
+            overlay.transform.SetAsLastSibling();
+            introGroup = overlay.GetComponent<CanvasGroup>();
+
+            var introTextGO = NewUI("IntroText", overlay.transform, typeof(TextMeshProUGUI));
+            var introRT = (RectTransform)introTextGO.transform;
+            introRT.anchorMin = new Vector2(0.5f, 0.5f);
+            introRT.anchorMax = new Vector2(0.5f, 0.5f);
+            introRT.pivot = new Vector2(0.5f, 0.5f);
+            introRT.anchoredPosition = Vector2.zero;
+            introRT.sizeDelta = new Vector2(1300, 300);
+            introTMP = introTextGO.GetComponent<TextMeshProUGUI>();
+            StyleText(introTMP, 34, new Color(0.82f, 0.80f, 0.76f));
+            introTMP.alignment = TextAlignmentOptions.Center;
+            introTMP.text = "";
+
+            var skipHint = NewUI("SkipHint", overlay.transform, typeof(TextMeshProUGUI));
+            var skipRT = (RectTransform)skipHint.transform;
+            skipRT.anchorMin = skipRT.anchorMax = new Vector2(1, 0);
+            skipRT.pivot = new Vector2(1, 0);
+            skipRT.anchoredPosition = new Vector2(-50, 50);
+            skipRT.sizeDelta = new Vector2(420, 40);
+            var skipTMP = skipHint.GetComponent<TextMeshProUGUI>();
+            StyleText(skipTMP, 18, new Color(0.35f, 0.35f, 0.35f));
+            skipTMP.alignment = TextAlignmentOptions.MidlineRight;
+            skipTMP.text = "아무 키나 눌러 건너뛰기";
+
             var tmpRes = GetTMPResources();
 
             var inputGO = TMP_DefaultControls.CreateInputField(tmpRes);
@@ -443,6 +475,8 @@ namespace Interrogation.EditorTools
             soU.FindProperty("subversionBar").objectReferenceValue = subversionBar;
             soU.FindProperty("gaugeLabel").objectReferenceValue = gaugeTMP;
             soU.FindProperty("debugText").objectReferenceValue = dbgTMP;
+            soU.FindProperty("introOverlay").objectReferenceValue = introGroup;
+            soU.FindProperty("introText").objectReferenceValue = introTMP;
             soU.ApplyModifiedPropertiesWithoutUndo();
 
             Selection.activeGameObject = game;

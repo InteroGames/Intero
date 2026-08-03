@@ -94,9 +94,17 @@ namespace Interrogation
                 d.reason += $"모순x{newContradictions} ";
             }
 
-            int repeat = CountTactic(st, tactic);
+            // 판 안에서의 반복만 본격적으로 벌한다.
+            // 판을 넘어 누적하면 3판째에는 무슨 말을 해도 매 턴 +10/+10이 되어 게임이 성립하지 않는다.
+            int repeat = CountTacticThisRun(st, tactic);
             if (repeat == 1) { d.suspicion += 5; d.subversion += 5; d.reason += "태틱반복2회 "; }
             else if (repeat >= 2) { d.suspicion += 10; d.subversion += 10; d.reason += "태틱반복3회+ "; }
+
+            // 지난 판에서도 쓰던 수라면 형사가 기억한다는 표시로 조금만 더.
+            if (repeat == 0 && UsedInPastRuns(st, tactic))
+            {
+                d.suspicion += 3; d.subversion += 3; d.reason += "지난판수법 ";
+            }
 
             switch (tactic)
             {
@@ -124,12 +132,19 @@ namespace Interrogation
 
         static int Clamp(int v) => Math.Max(0, Math.Min(100, v));
 
-        /// <summary>이번 턴 이전에 같은 태틱을 몇 번 썼는지.</summary>
-        static int CountTactic(InterrogationState st, Tactic t)
+        /// <summary>이번 판에서, 이번 턴 이전에 같은 태틱을 몇 번 썼는지.</summary>
+        static int CountTacticThisRun(InterrogationState st, Tactic t)
         {
             int c = 0;
-            foreach (var u in st.usedTactics) if (u.tactic == t) c++;
+            foreach (var u in st.usedTactics) if (u.tactic == t && u.run == st.runCount) c++;
             return c;
+        }
+
+        /// <summary>지난 판들에서 쓴 적 있는 수인지. 기억은 지우지 않는다.</summary>
+        static bool UsedInPastRuns(InterrogationState st, Tactic t)
+        {
+            foreach (var u in st.usedTactics) if (u.tactic == t && u.run != st.runCount) return true;
+            return false;
         }
 
         /// <summary>이 인물이 지금까지 나온 적 없는 새 이름인지.</summary>
