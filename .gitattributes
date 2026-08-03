@@ -1,0 +1,21 @@
+# 유니티 씬/프리팹/에셋은 줄 단위 자동 병합이 위험하다.
+# UnityYAMLMerge를 붙이거나, 충돌 시 재생성한다 (아래 CLAUDE.md 협업 규칙 참조).
+*.unity   merge=unityyamlmerge eol=lf
+*.prefab  merge=unityyamlmerge eol=lf
+*.asset   merge=unityyamlmerge eol=lf
+*.mat     merge=unityyamlmerge eol=lf
+*.meta    merge=unityyamlmerge eol=lf
+
+# 텍스트로 다뤄야 리뷰가 된다
+*.cs      text diff=csharp
+*.json    text
+*.md      text
+
+# 바이너리 - 병합 시도 금지
+*.ttf     binary
+*.otf     binary
+*.png     binary
+*.jpg     binary
+*.wav     binary
+*.mp3     binary
+*.fbx     binary

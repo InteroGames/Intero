@@ -24,6 +24,45 @@
 
 ---
 
+## 협업 (3인)
+
+리포: `https://github.com/jasonwpgml/Intero.git`
+
+### 처음 클론했을 때 (팀원 각자 1회)
+
+1. **에디터 버전을 정확히 맞춘다.** 다른 버전으로 열면 프로젝트 파일이 갈려서 전원이 고생한다.
+   `ProjectSettings/ProjectVersion.txt`를 임의로 고치지 말 것.
+2. **`apikey.txt`를 프로젝트 루트에 직접 만든다.** 커밋되지 않으므로 각자 자기 키를 쓴다.
+   ```
+   openai=sk-...
+   ```
+3. `Tools > Interrogation > Setup Scene` 실행 → Play.
+
+### 파일 소유권
+
+겹치지 않게 나눠 두었다. 남의 영역을 고쳐야 하면 먼저 말할 것.
+
+| 담당 | 파일 |
+|---|---|
+| 로직·판정 | `InterrogationState.cs`, `Judgment.cs` |
+| LLM·대사 | `LLMClient.cs`, `DialoguePool.cs`, `dialogue_pool.json` |
+| 씬·연출·UI | `InterrogationSceneSetup.cs`, `SpeechBubble.cs`, `SeatedLook.cs`, `InterrogationUI.cs` |
+
+`InterrogationController.cs`는 로직과 LLM이 만나는 이음매다. **여기를 고칠 때만 서로 알린다.**
+
+### 씬 충돌은 병합하지 않는다
+
+`Interrogation.unity`, `Assets/Materials/*`, `Malgun SDF.asset`은 전부 **코드가 생성한 산출물**이다.
+충돌이 나면 YAML을 들여다보지 말고 한쪽을 고른 뒤 `Setup Scene`을 다시 돌린다.
+씬을 손으로 고쳐야 하는 시점(D5 연출)이 오면, 그때 이 규칙을 팀에서 깨고 명시적으로 알린다.
+
+### 브랜치
+
+`main` 직접 푸시 금지. 짧게 살고 빨리 합치는 브랜치를 쓴다 (`logic/turn-limit`, `ui/bubble-fade`).
+해커톤이므로 리뷰는 가볍게, 대신 **머지 전에 반드시 Play로 한 판 돌려본다.**
+
+---
+
 ## 절대 규칙 (어기면 프로젝트가 망가진다)
 
 ### 1. LLM은 판정하지 않는다
@@ -91,12 +130,13 @@ LLM이 하는 일은 **자연어 → 데이터** 변환 하나뿐이다.
 
 **이게 안 고쳐지면 게임이 재미없는 게 아니라 부당하게 느껴진다.** 최우선.
 
-### P1. 승리 경로가 없다
+### ~~P1. 승리 경로가 없다~~ — 해결됨 (8/3)
 
-`CanReleaseNow()`가 정의만 되어 있고 호출되는 곳이 없다. 지금은 지는 것밖에 안 된다.
+`TURN_LIMIT = 6`에 도달하면 `Evaluate()`가 판정한다.
+둘 다 50 미만 → `RELEASED`(유일한 승리, 게임 종료). 아니면 `HELD` → 다음 판 재조사.
+`HELD`는 D1 이후 추가된 열거값이다 (규칙 4의 예외, `InterrogationState.cs`에 사유 기재).
 
-→ 판당 턴 상한(임시 6턴)을 두고, 상한 도달 시 `CanReleaseNow()`로 석방/구금 판정.
-→ 석방 엔딩용 CLOSING 대사가 `dialogue_pool.json`에 없다. 추가 필요.
+**남은 것:** 턴 상한 6이 적절한지 미검증. 석방 전용 대사가 대사 풀에 없어서 지금은 LLM 생성에만 의존한다.
 
 ### ~~P2. DialoguePool이 Newtonsoft 의존~~ — 해결됨 (8/3)
 

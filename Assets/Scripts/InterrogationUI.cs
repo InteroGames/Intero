@@ -27,6 +27,12 @@ namespace Interrogation
         [SerializeField] float typeSpeed = 0.03f;
         [SerializeField] bool showDebug = true;
 
+        [Header("오프닝")]
+        [SerializeField] CanvasGroup introOverlay;   // 암전 + 내레이션
+        [SerializeField] TMP_Text introText;
+        [SerializeField] float introLineHold = 2.4f;
+        [SerializeField] bool playIntro = true;
+
         readonly StringBuilder log = new StringBuilder();
         string currentQuestion;
         bool busy;
@@ -37,14 +43,93 @@ namespace Interrogation
             submitButton.onClick.AddListener(OnSubmit);
             inputField.onSubmit.AddListener(_ => OnSubmit());
             debugText.gameObject.SetActive(showDebug);
-            StartCoroutine(OpenRun());
+            StartCoroutine(Boot());
         }
+
+        IEnumerator Boot()
+        {
+            if (playIntro && introOverlay != null) yield return PlayIntro();
+            else if (introOverlay != null) introOverlay.alpha = 0f;
+            yield return OpenRun();
+        }
+
+        /// <summary>
+        /// 암전에서 시작해 주인공의 독백을 한 줄씩 보여준다.
+        /// 클릭이나 아무 키로 건너뛸 수 있다 - 시연 중 두 번째 플레이에서 기다리게 하면 안 된다.
+        /// </summary>
+        IEnumerator PlayIntro()
+        {
+            busy = true;
+            submitButton.interactable = false;
+            introOverlay.alpha = 1f;
+            introOverlay.blocksRaycasts = true;
+
+            for (int i = 0; i < controller.IntroLineCount; i++)
+            {
+                string line = controller.IntroLine(i);
+                TranscriptLog.Write($"[intro] {line}");
+
+                yield return FadeText(line, 0f, 1f, 0.5f);
+
+                float t = 0f;
+                while (t < introLineHold && !SkipPressed()) { t += Time.deltaTime; yield return null; }
+
+                yield return FadeText(line, 1f, 0f, 0.35f);
+                if (SkipPressed()) break;
+            }
+
+            // 암전이 걷히며 취조실이 드러난다
+            float f = 0f;
+            while (f < 1f)
+            {
+                f += Time.deltaTime / 1.1f;
+                introOverlay.alpha = 1f - f;
+                yield return null;
+            }
+            introOverlay.alpha = 0f;
+            introOverlay.blocksRaycasts = false;
+
+            busy = false;
+            submitButton.interactable = true;
+        }
+
+        IEnumerator FadeText(string line, float from, float to, float dur)
+        {
+            introText.text = line;
+            float t = 0f;
+            while (t < dur)
+            {
+                t += Time.deltaTime;
+                var c = introText.color;
+                c.a = Mathf.Lerp(from, to, t / dur);
+                introText.color = c;
+                if (SkipPressed()) break;
+                yield return null;
+            }
+            var end = introText.color;
+            end.a = to;
+            introText.color = end;
+        }
+
+        static bool SkipPressed() => Input.anyKeyDown || Input.GetMouseButtonDown(0);
 
         IEnumerator OpenRun()
         {
             log.Clear();
             TranscriptLog.Write($"\n=== 제{controller.State.runCount}차 조사 ===");
             AppendSystem($"— 제{controller.State.runCount}차 조사 —");
+
+            // 2판째부터는 "또 불려왔다"는 감각을 먼저 준다
+            if (controller.State.runCount > 1)
+            {
+                string opening = controller.RunOpening();
+                if (!string.IsNullOrEmpty(opening))
+                {
+                    AppendSystem(opening);
+                    yield return new WaitForSeconds(1.4f);
+                }
+            }
+
             currentQuestion = controller.NextQuestion();
             yield return Say(currentQuestion);
             RefreshGauges();
@@ -80,7 +165,10 @@ namespace Interrogation
                 yield return new WaitForSeconds(0.7f);   // 뜸. 즉답보다 무섭다.
             }
 
-            if (result.quotedStatement != null || result.tacticRepeated)
+            // 판을 넘어 같은 수로 시작했을 때. 이 침묵이 대사의 무게를 만든다.
+            if (result.openingRepeat)
+                yield return new WaitForSeconds(1.1f);
+            else if (result.quotedStatement != null || result.tacticRepeated)
                 yield return new WaitForSeconds(0.4f);   // 인용 직전 침묵
 
             yield return Say(result.line);
@@ -132,12 +220,25 @@ namespace Interrogation
 
             switch (r.outcome)
             {
+                case Outcome.RELEASED:
+                    AppendSystem("— 문이 열린다 —"); break;
+                case Outcome.HELD:
+                    AppendSystem("— 오늘은 여기까지 —"); break;
                 case Outcome.CONVICTED_THEFT:
                     AppendSystem("— 절도 혐의 확정 —"); break;
                 case Outcome.SEIZED_SUBVERSION:
                     AppendSystem("— 조직 수사로 이송 —"); break;
                 case Outcome.TOTAL_LOSS:
                     AppendSystem("— 기록이 사라졌다 —"); break;
+            }
+
+            // 석방은 이 게임의 유일한 승리다. 다음 판은 없다.
+            if (r.outcome == Outcome.RELEASED)
+            {
+                yield return new WaitForSeconds(1.2f);
+                AppendSystem($"제{controller.State.runCount}차 조사 끝에 자네는 취조실을 나왔다.");
+                if (bubble != null) bubble.Hide();
+                yield break;
             }
 
             if (r.hiddenEnding)
