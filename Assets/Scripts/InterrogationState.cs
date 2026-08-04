@@ -16,7 +16,20 @@ namespace Interrogation
     /// 턴 상한에 걸렸지만 게이지가 패배선(80) 아래일 때, 승리도 패배도 아닌 상태가 필요했다.
     /// 이게 없으면 "판이 끝나도 형사는 기억한다"는 재조사 루프를 표현할 수 없다.
     /// </summary>
-    public enum Outcome { ONGOING, RELEASED, HELD, CONVICTED_THEFT, SEIZED_SUBVERSION, TOTAL_LOSS }
+    /// <summary>
+    /// HELD는 D1 이후 추가됐다 (규칙 4의 예외).
+    /// 턴 상한에 걸렸지만 게이지가 패배선(80) 아래일 때, 승리도 패배도 아닌 상태가 필요했다.
+    /// 이게 없으면 "판이 끝나도 형사는 기억한다"는 재조사 루프를 표현할 수 없다.
+    ///
+    /// COLD_GAME / ASYLUM은 8/4 기획서에서 추가됐다.
+    /// COLD_GAME - 흠 하나 없이 통과. 이 게임의 만점이다.
+    /// ASYLUM    - 헛소리를 반복하면 취조가 아니라 진단이 된다.
+    /// </summary>
+    public enum Outcome
+    {
+        ONGOING, RELEASED, COLD_GAME, HELD,
+        CONVICTED_THEFT, SEIZED_SUBVERSION, TOTAL_LOSS, ASYLUM
+    }
 
     /// <summary>LLM이 채우는 유일한 구조. 판정은 하지 않는다.</summary>
     [Serializable]
@@ -45,6 +58,15 @@ namespace Interrogation
         public string person;
         public string action;
         public string raw;
+
+        /// <summary>
+        /// 이 진술이 답한 조서 항목. 형사가 물은 카드에서 온다 (LLM 관여 없음).
+        ///
+        /// 모순은 같은 factId 안에서만 대조한다. 이게 없으면
+        /// "그날 밤 어디 있었나"와 "어제는 어디 있었나"의 답이 서로 모순으로 잡힌다.
+        /// null이면 카드에 속하지 않은 잡담이므로 대조에 참여하지 않는다.
+        /// </summary>
+        public string factId;
     }
 
     [Serializable]
@@ -93,6 +115,8 @@ namespace Interrogation
         public const int LOSE_THRESHOLD = 80;
         public const int WIN_THRESHOLD = 50;
         public const int TURN_LIMIT = 6;      // 한 판의 길이. D6에서 재조정.
+        public const int COLD_GAME_MAX = 20;  // 이 아래로 유지한 채 통과하면 콜드게임
+        public const int ASYLUM_NONSENSE = 6; // 헛소리가 이만큼 쌓이면 진단으로 넘어간다
         public const int HIDDEN_MIN_RUNS = 3;
         public const int HIDDEN_MIN_REPEAT = 3;
 
@@ -110,6 +134,9 @@ namespace Interrogation
 
         public Outcome Evaluate()
         {
+            // 헛소리가 쌓이면 혐의가 아니라 정신 상태가 문제가 된다. 취조실을 나가긴 하지만 승리는 아니다.
+            if (CountTactic(Tactic.NONSENSE) >= ASYLUM_NONSENSE) return Outcome.ASYLUM;
+
             bool s = suspicion >= LOSE_THRESHOLD;
             bool v = subversion >= LOSE_THRESHOLD;
             if (s && v) return Outcome.TOTAL_LOSS;
@@ -119,9 +146,26 @@ namespace Interrogation
             // 턴 상한에 도달하면 형사가 서류를 덮는다.
             // 둘 다 50 미만이어야 나갈 수 있다 (D1 승리 조건). 아니면 다시 부른다.
             if (turn >= TURN_LIMIT)
-                return CanReleaseNow() ? Outcome.RELEASED : Outcome.HELD;
+            {
+                if (!CanReleaseNow()) return Outcome.HELD;
+
+                // 흠 하나 없이 빠져나갔는가. 천라지망을 통과한 것이다.
+                return suspicion < COLD_GAME_MAX && subversion < COLD_GAME_MAX && !everExposed
+                    ? Outcome.COLD_GAME
+                    : Outcome.RELEASED;
+            }
 
             return Outcome.ONGOING;
+        }
+
+        /// <summary>이 판에서 한 번이라도 물증에 걸렸는가. 콜드게임 자격을 잃는다.</summary>
+        public bool everExposed;
+
+        int CountTactic(Tactic t)
+        {
+            int c = 0;
+            foreach (var u in usedTactics) if (u.tactic == t) c++;
+            return c;
         }
 
         public bool CanReleaseNow()
@@ -138,6 +182,7 @@ namespace Interrogation
             subversion = 0;
             flags.silenceCount = 0;
             flags.parseFailCount = 0;
+            everExposed = false;
             // statements / contradictions / usedTactics 는 절대 지우지 않는다.
         }
 
