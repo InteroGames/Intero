@@ -16,6 +16,19 @@ namespace Interrogation
         readonly List<string> repeatTemplates = new List<string>();
         readonly List<string> openingRepeatTemplates = new List<string>();
         readonly List<string> introLines = new List<string>();
+        readonly Dictionary<string, List<string>> clerkLines = new Dictionary<string, List<string>>();
+        readonly List<string> briefingLines = new List<string>();
+        readonly Dictionary<string, List<string>> playerActions = new Dictionary<string, List<string>>();
+        readonly Dictionary<string, (string persona, string arrival)> interrogators
+            = new Dictionary<string, (string, string)>();
+
+        /// <summary>취조관 프로필 텍스트. key는 InterrogatorType 이름.</summary>
+        public (string persona, string arrival) Interrogator(string key)
+            => interrogators.TryGetValue(key, out var v) ? v : (null, null);
+
+        public string BriefingTitle { get; private set; }
+        public string BriefingFooter { get; private set; }
+        public IReadOnlyList<string> BriefingLines => briefingLines;
         readonly List<string> runOpenings = new List<string>();
 
         public static DialoguePool Load(string json)
@@ -42,6 +55,33 @@ namespace Interrogation
             if (qt?["opening_repeat"] != null)
                 p.openingRepeatTemplates.AddRange(qt["opening_repeat"].ToObject<List<string>>());
 
+            var brief = root["briefing"] as JObject;
+            if (brief != null)
+            {
+                p.BriefingTitle = (string)brief["title"];
+                p.BriefingFooter = (string)brief["footer"];
+                if (brief["lines"] != null)
+                    p.briefingLines.AddRange(brief["lines"].ToObject<List<string>>());
+            }
+
+            var clerk = root["clerk"] as JObject;
+            if (clerk != null)
+                foreach (var kv in clerk)
+                    if (kv.Value is JArray) p.clerkLines[kv.Key] = kv.Value.ToObject<List<string>>();
+
+            var interro = root["interrogators"] as JObject;
+            if (interro != null)
+                foreach (var kv in interro)
+                {
+                    if (!(kv.Value is JObject o)) continue;
+                    p.interrogators[kv.Key] = ((string)o["persona"], (string)o["arrival"]);
+                }
+
+            var pa = root["player_action"] as JObject;
+            if (pa != null)
+                foreach (var kv in pa)
+                    if (kv.Value is JArray) p.playerActions[kv.Key] = kv.Value.ToObject<List<string>>();
+
             if (root["intro"] != null)
                 p.introLines.AddRange(root["intro"].ToObject<List<string>>());
             if (root["run_opening"] != null)
@@ -58,6 +98,20 @@ namespace Interrogation
         }
 
         public IReadOnlyList<string> Intro => introLines;
+
+        /// <summary>말이 아닌 입력을 대신할 지문. 없으면 null이고, 그때는 원문을 그대로 쓴다.</summary>
+        public string PlayerAction(string key)
+        {
+            if (key == null || !playerActions.TryGetValue(key, out var l) || l.Count == 0) return null;
+            return l[Random.Range(0, l.Count)];
+        }
+
+        /// <summary>서기의 사무적인 말. key: opening / between / closing</summary>
+        public string Clerk(string key)
+        {
+            if (!clerkLines.TryGetValue(key, out var l) || l.Count == 0) return null;
+            return l[Random.Range(0, l.Count)];
+        }
 
         public string PickRunOpening(int runCount)
             => runOpenings.Count == 0 ? null : runOpenings[(runCount - 2 + runOpenings.Count) % runOpenings.Count];

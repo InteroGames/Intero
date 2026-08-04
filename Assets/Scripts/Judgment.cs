@@ -5,7 +5,14 @@ namespace Interrogation
 {
     /// <summary>
     /// 모순 검출. LLM은 여기 관여하지 않는다.
-    /// 같은 (run 무관) 질문 맥락에서 같은 필드에 다른 값이 오면 모순.
+    ///
+    /// **같은 조서 항목(factId) 안에서만 대조한다.**
+    /// 예전에는 모든 진술의 같은 필드를 무차별로 맞춰봤고, 그래서
+    /// "그날 밤 어디 있었나"의 답과 "어제는 어디 있었나"의 답이 서로 모순으로 잡혔다.
+    /// 게다가 새 진술마다 과거 전부와 새 쌍이 만들어져 한 번의 실수가 매 턴 재과금됐다
+    /// (8/4 로그: 모순x2가 턴1·2·3 연속으로 잡혀 세 턴 만에 의심 90).
+    ///
+    /// 카드 단위로 좁히면 둘 다 사라진다. 재과금은 CaseFact.broken이 막는다.
     /// </summary>
     public static class ContradictionDetector
     {
@@ -29,10 +36,14 @@ namespace Interrogation
             return v.Trim().ToLowerInvariant().Replace(" ", "");
         }
 
-        /// <summary>새 진술을 기존 진술들과 대조. 새로 발견된 모순만 반환.</summary>
+        /// <summary>
+        /// 새 진술을 <b>같은 조서 항목의</b> 기존 진술들과 대조. 새로 발견된 모순만 반환.
+        /// 카드에 속하지 않은 진술(factId == null)은 대조하지 않는다.
+        /// </summary>
         public static List<Contradiction> Check(InterrogationState st, Statement incoming)
         {
             var found = new List<Contradiction>();
+            if (string.IsNullOrEmpty(incoming.factId)) return found;
 
             foreach (var field in Fields)
             {
@@ -41,6 +52,9 @@ namespace Interrogation
 
                 foreach (var prev in st.statements)
                 {
+                    // 다른 항목에 대한 답은 애초에 비교 대상이 아니다.
+                    if (prev.factId != incoming.factId) continue;
+
                     string oldVal = Norm(Get(prev, field));
                     if (oldVal == null) continue;
                     if (oldVal == newVal) continue;
@@ -83,9 +97,16 @@ namespace Interrogation
             Tactic tactic,
             int newContradictions,
             bool newPersonNamed,
-            bool confessedTheft)
+            bool confessedTheft,
+            bool bustedByEvidence = false)
         {
             var d = new Delta { suspicion = 0, subversion = 0, reason = "" };
+
+            // 형사가 증거를 쥔 항목에 거짓말했다. 모순보다 무겁다 - 반박이 불가능하니까.
+            if (bustedByEvidence)
+            {
+                d.suspicion += 20; d.subversion += 5; d.reason += "물증발각 ";
+            }
 
             if (newContradictions > 0)
             {
@@ -127,6 +148,29 @@ namespace Interrogation
 
             st.suspicion = Clamp(st.suspicion + d.suspicion);
             st.subversion = Clamp(st.subversion + d.subversion);
+            return d;
+        }
+
+        /// <summary>
+        /// 판이 끝날 때 정산한다. 들키지 않고 지켜낸 거짓말이 곧 점수다.
+        /// 대담하게 많이 지어낼수록 의심이 크게 내려간다 - 이 게임에서 유일하게 잘한 플레이를 보상하는 축.
+        /// </summary>
+        public static Delta SettleLies(InterrogationState st, CaseFile caseFile)
+        {
+            int survived = caseFile.SurvivingLies();
+            var d = new Delta { suspicion = 0, subversion = 0, reason = "" };
+
+            if (survived > 0)
+            {
+                // 하나만 지켜내도 보상하되, 여러 개를 지탱했으면 가산한다.
+                d.suspicion -= 6 * survived;
+                d.reason = $"거짓유지x{survived}";
+                st.suspicion = Clamp(st.suspicion + d.suspicion);
+            }
+            else
+            {
+                d.reason = "지켜낸 거짓 없음";
+            }
             return d;
         }
 

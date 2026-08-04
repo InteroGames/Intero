@@ -27,6 +27,14 @@ namespace Interrogation
         [SerializeField] float typeSpeed = 0.03f;
         [SerializeField] bool showDebug = true;
 
+        [Header("안내")]
+        [SerializeField] BriefingPanel briefing;
+        [SerializeField] TurnFeedback feedback;   // 임시. 나중에 형사의 표정·행동이 대신한다.
+
+        [Header("번복권")]
+        [SerializeField] Button retractButton;
+        [SerializeField] TMP_Text retractLabel;
+
         [Header("오프닝")]
         [SerializeField] CanvasGroup introOverlay;   // 암전 + 내레이션
         [SerializeField] TMP_Text introText;
@@ -42,6 +50,8 @@ namespace Interrogation
             TranscriptLog.Begin();
             submitButton.onClick.AddListener(OnSubmit);
             inputField.onSubmit.AddListener(_ => OnSubmit());
+            if (retractButton != null) retractButton.onClick.AddListener(OnRetract);
+            RefreshRetract();
             debugText.gameObject.SetActive(showDebug);
             StartCoroutine(Boot());
         }
@@ -50,6 +60,16 @@ namespace Interrogation
         {
             if (playIntro && introOverlay != null) yield return PlayIntro();
             else if (introOverlay != null) introOverlay.alpha = 0f;
+
+            // 규칙을 한 번 짚어준다. 이후에는 Tab으로 다시 볼 수 있다.
+            if (briefing != null)
+            {
+                briefing.Build(controller.Pool);
+                yield return briefing.ShowAndWait();
+            }
+
+            // 미리 쓰는 조서 턴은 없앴다. 곧바로 취조실이고,
+            // 형사가 처음 묻는 항목에 한 답이 그대로 조서에 적힌다.
             yield return OpenRun();
         }
 
@@ -67,12 +87,21 @@ namespace Interrogation
             for (int i = 0; i < controller.IntroLineCount; i++)
             {
                 string line = controller.IntroLine(i);
+
+                // 체포 근거는 매 판 다르고, 난이도에 따라 감춰진다.
+                if (line == "{LEAD}")
+                {
+                    line = controller.LeadNarration()
+                           ?? "무엇이 잘못됐는지는 모른다.\n다만 사흘 만에 그들이 찾아왔다.";
+                }
+
                 TranscriptLog.Write($"[intro] {line}");
 
                 yield return FadeText(line, 0f, 1f, 0.5f);
 
+                float hold = HoldFor(line);
                 float t = 0f;
-                while (t < introLineHold && !SkipPressed()) { t += Time.deltaTime; yield return null; }
+                while (t < hold && !SkipPressed()) { t += Time.deltaTime; yield return null; }
 
                 yield return FadeText(line, 1f, 0f, 0.35f);
                 if (SkipPressed()) break;
@@ -91,6 +120,14 @@ namespace Interrogation
 
             busy = false;
             submitButton.interactable = true;
+        }
+
+        /// <summary>여러 줄짜리 한 호흡은 읽는 데 더 걸린다. 줄 수에 맞춰 머무는 시간을 늘린다.</summary>
+        float HoldFor(string line)
+        {
+            int lines = 1;
+            foreach (char c in line) if (c == '\n') lines++;
+            return introLineHold + (lines - 1) * 0.75f;
         }
 
         IEnumerator FadeText(string line, float from, float to, float dur)
@@ -128,12 +165,50 @@ namespace Interrogation
                     AppendSystem(opening);
                     yield return new WaitForSeconds(1.4f);
                 }
+
+                // 앉아 있는 사람이 바뀌었다는 것부터 알린다
+                if (!string.IsNullOrEmpty(controller.InterrogatorArrival))
+                {
+                    AppendSystem(controller.InterrogatorArrival);
+                    yield return new WaitForSeconds(1.6f);
+                }
+
+                // 이번엔 경찰이 다른 것을 들고 왔다
+                string lead = controller.LeadNarration();
+                if (!string.IsNullOrEmpty(lead))
+                {
+                    AppendSystem(lead);
+                    yield return new WaitForSeconds(1.5f);
+                }
             }
 
             currentQuestion = controller.NextQuestion();
             yield return Say(currentQuestion);
             RefreshGauges();
             inputField.ActivateInputField();
+        }
+
+        /// <summary>방금 한 말을 주워담는다. 모순으로 걸리기 전에 쓰는 마지막 수단.</summary>
+        void OnRetract()
+        {
+            if (busy || !controller.CanRetract) return;
+
+            string undone = controller.Retract();
+            if (undone == null) return;
+
+            AppendSystem($"(방금 한 말을 주워담는다 — \"{undone}\")");
+            if (feedback != null)
+                feedback.ReportSettlement("번복", 6);
+            RefreshGauges();
+            RefreshRetract();
+        }
+
+        void RefreshRetract()
+        {
+            if (retractButton == null) return;
+            retractButton.interactable = !busy && controller.CanRetract;
+            if (retractLabel != null)
+                retractLabel.text = $"번복  {controller.RetractionsLeft}";
         }
 
         void OnSubmit()
@@ -149,7 +224,12 @@ namespace Interrogation
             busy = true;
             submitButton.interactable = false;
 
-            AppendPlayer(input);
+            // 지금 형사가 캐고 있던 항목. 판정 후에는 다음 질문으로 넘어가므로 미리 잡아둔다.
+            string probedLabel = controller.CurrentTopic?.label;
+            int turnNumber = controller.State.turn + 1;
+
+            // 자판을 뭉갠 입력은 그대로 띄우지 않는다. 지문으로 바꿔 보여준다.
+            AppendPlayer(controller.DisplayFor(input) ?? input);
 
             // 응답 대기를 덮는 연출. LLM 호출과 병렬로 돈다.
             var stall = StartCoroutine(Stall());
@@ -177,6 +257,20 @@ namespace Interrogation
             if (showDebug)
                 debugText.text = $"{result.tactic}  의심{result.deltaSuspicion:+#;-#;0}  불온{result.deltaSubversion:+#;-#;0}  [{result.reason}]";
 
+            if (feedback != null)
+            {
+                feedback.Report(turnNumber, result, probedLabel);
+                if (result.settleReason != null)
+                    feedback.ReportSettlement(result.settleReason, result.settleSuspicion);
+            }
+
+            if (result.settleReason != null)
+                TranscriptLog.Write($"  [정산] {result.settleReason} 의심{result.settleSuspicion:+#;-#;0}");
+
+            if (result.bustedFact != null)
+                TranscriptLog.Write($"  ※ 물증 발각: {result.bustedFact.label} " +
+                                    $"(진술 '{result.bustedFact.playerValue}' / 사실 '{result.bustedFact.truth}') → 확정 승격");
+
             var st = controller.State;
             TranscriptLog.Write(
                 $"[턴{st.turn}] Q: {currentQuestion}\n" +
@@ -196,14 +290,16 @@ namespace Interrogation
                 // 생성 대사가 반응과 질문을 겸한다. 풀 질문을 덧붙이면 형사가 두 번 말한다.
                 currentQuestion = result.line;
             }
-            else if (!result.repeatQuestion)   // 폴백이면 같은 질문에 대한 답을 기다린다
+            else if (!result.repeatQuestion)
             {
-                currentQuestion = controller.NextQuestion();
+                // 항목은 Submit 안에서 이미 넘어갔다. 여기서는 문장만 가져온다.
+                currentQuestion = controller.QuestionText();
                 yield return Say(currentQuestion);
             }
 
             busy = false;
             submitButton.interactable = true;
+            RefreshRetract();
             inputField.ActivateInputField();
         }
 
@@ -220,8 +316,12 @@ namespace Interrogation
 
             switch (r.outcome)
             {
+                case Outcome.COLD_GAME:
+                    AppendSystem("— 형사가 서류를 덮는다. 한 줄도 적히지 않았다 —"); break;
                 case Outcome.RELEASED:
                     AppendSystem("— 문이 열린다 —"); break;
+                case Outcome.ASYLUM:
+                    AppendSystem("— 의사가 불려온다 —"); break;
                 case Outcome.HELD:
                     AppendSystem("— 오늘은 여기까지 —"); break;
                 case Outcome.CONVICTED_THEFT:
@@ -232,11 +332,27 @@ namespace Interrogation
                     AppendSystem("— 기록이 사라졌다 —"); break;
             }
 
-            // 석방은 이 게임의 유일한 승리다. 다음 판은 없다.
-            if (r.outcome == Outcome.RELEASED)
+            // 취조실을 나가는 경로들. 어느 쪽이든 다음 판은 없다.
+            if (r.outcome == Outcome.RELEASED || r.outcome == Outcome.COLD_GAME
+                || r.outcome == Outcome.ASYLUM)
             {
                 yield return new WaitForSeconds(1.2f);
-                AppendSystem($"제{controller.State.runCount}차 조사 끝에 자네는 취조실을 나왔다.");
+
+                switch (r.outcome)
+                {
+                    case Outcome.COLD_GAME:
+                        AppendSystem("흠 하나 없었다. 그들은 자네에게 물을 것이 남지 않았다.\n" +
+                                     "천라지망을 그대로 걸어 나왔다.");
+                        break;
+                    case Outcome.RELEASED:
+                        AppendSystem($"제{controller.State.runCount}차 조사 끝에 자네는 취조실을 나왔다.");
+                        break;
+                    case Outcome.ASYLUM:
+                        AppendSystem("그들은 더 이상 자네를 심문하지 않는다.\n" +
+                                     "이제 자네를 진단할 뿐이다.");
+                        break;
+                }
+
                 if (bubble != null) bubble.Hide();
                 yield break;
             }
@@ -251,6 +367,9 @@ namespace Interrogation
 
             yield return new WaitForSeconds(1.5f);
             controller.NextRun();
+            if (feedback != null) feedback.Clear();
+
+            // 재조사도 카드를 다시 섞어 뽑은 채로 곧장 시작한다 (NextRun 안에서 Deal).
             yield return OpenRun();
         }
 

@@ -36,6 +36,10 @@ namespace Interrogation.EditorTools
         static TMP_FontAsset koreanFont;
         static CanvasGroup introGroup;
         static TMP_Text introTMP;
+        static TurnFeedback turnFeedback;
+        static BriefingPanel briefingPanel;
+        static Button retractButtonRef;
+        static TMP_Text retractLabelTMP;
 
         [MenuItem("Tools/Interrogation/Setup Scene")]
         public static void Setup()
@@ -375,6 +379,9 @@ namespace Interrogation.EditorTools
             dbgTMP.alignment = TextAlignmentOptions.TopLeft;
             dbgTMP.text = "";
 
+            BuildTurnFeedback(canvasGO.transform);
+            BuildBriefing(canvasGO.transform);
+
             // 오프닝 암전 - 항상 맨 위에 그린다
             var overlay = NewUI("IntroOverlay", canvasGO.transform, typeof(Image), typeof(CanvasGroup));
             Stretch(overlay, Vector2.zero, Vector2.zero);
@@ -442,7 +449,163 @@ namespace Interrogation.EditorTools
             btnLabel.text = "답한다";
             submitButton = buttonGO.GetComponent<Button>();
 
+            // 번복권 - 방금 한 말을 주워담는다
+            var retractGO = TMP_DefaultControls.CreateButton(tmpRes);
+            retractGO.name = "RetractButton";
+            retractGO.transform.SetParent(canvasGO.transform, false);
+            var reRT = (RectTransform)retractGO.transform;
+            reRT.anchorMin = reRT.anchorMax = new Vector2(1, 0);
+            reRT.pivot = new Vector2(1, 0);
+            reRT.anchoredPosition = new Vector2(-40, 122);
+            reRT.sizeDelta = new Vector2(240, 44);
+            retractGO.GetComponent<Image>().color = new Color(0.16f, 0.14f, 0.13f, 0.92f);
+            retractLabelTMP = retractGO.GetComponentInChildren<TextMeshProUGUI>();
+            StyleText(retractLabelTMP, 20, new Color(0.70f, 0.66f, 0.58f));
+            retractLabelTMP.text = "번복  1";
+            retractButtonRef = retractGO.GetComponent<Button>();
+
             return canvasGO;
+        }
+
+        /// <summary>
+        /// 오른쪽 턴 판정 표시. 임시 장치이고, 나중에 형사의 표정·행동이 대신한다.
+        /// </summary>
+        static void BuildTurnFeedback(Transform parent)
+        {
+            var root = NewUI("TurnFeedback", parent, typeof(TurnFeedback));
+            var rt = (RectTransform)root.transform;
+            rt.anchorMin = rt.anchorMax = new Vector2(1, 1);
+            rt.pivot = new Vector2(1, 1);
+            rt.anchoredPosition = new Vector2(-40, -190);
+            rt.sizeDelta = new Vector2(460, 520);
+
+            var list = NewUI("List", root.transform, typeof(VerticalLayoutGroup));
+            var lRT = (RectTransform)list.transform;
+            lRT.anchorMin = new Vector2(0, 1); lRT.anchorMax = new Vector2(1, 1);
+            lRT.pivot = new Vector2(0.5f, 1);
+            lRT.anchoredPosition = Vector2.zero;
+            lRT.sizeDelta = new Vector2(0, 520);
+            var vlg = list.GetComponent<VerticalLayoutGroup>();
+            vlg.spacing = 10;
+            vlg.childAlignment = TextAnchor.UpperRight;
+            vlg.childControlHeight = false;
+            vlg.childControlWidth = true;
+            vlg.childForceExpandHeight = false;
+
+            // 복제될 한 줄. 자식 이름은 TurnFeedback이 찾으므로 바꾸지 말 것.
+            var row = NewUI("RowTemplate", root.transform, typeof(CanvasGroup));
+            var rowRT = (RectTransform)row.transform;
+            rowRT.sizeDelta = new Vector2(460, 46);
+            row.GetComponent<CanvasGroup>().alpha = 0f;
+
+            var title = NewUI("Title", row.transform, typeof(TextMeshProUGUI));
+            var tRT = (RectTransform)title.transform;
+            tRT.anchorMin = new Vector2(0, 1); tRT.anchorMax = new Vector2(1, 1);
+            tRT.pivot = new Vector2(0.5f, 1);
+            tRT.offsetMin = new Vector2(0, 0); tRT.offsetMax = new Vector2(0, 0);
+            tRT.anchoredPosition = new Vector2(0, 0);
+            tRT.sizeDelta = new Vector2(0, 24);
+            var titleTMP = title.GetComponent<TextMeshProUGUI>();
+            StyleText(titleTMP, 19, new Color(0.55f, 0.55f, 0.53f));
+            titleTMP.alignment = TextAlignmentOptions.MidlineRight;
+
+            var detail = NewUI("Detail", row.transform, typeof(TextMeshProUGUI));
+            var dRT = (RectTransform)detail.transform;
+            dRT.anchorMin = new Vector2(0, 1); dRT.anchorMax = new Vector2(1, 1);
+            dRT.pivot = new Vector2(0.5f, 1);
+            dRT.anchoredPosition = new Vector2(0, -23);
+            dRT.sizeDelta = new Vector2(0, 24);
+            var detailTMP = detail.GetComponent<TextMeshProUGUI>();
+            StyleText(detailTMP, 21, new Color(0.7f, 0.7f, 0.7f));
+            detailTMP.alignment = TextAlignmentOptions.MidlineRight;
+
+            row.SetActive(false);
+
+            var fb = root.GetComponent<TurnFeedback>();
+            var so = new SerializedObject(fb);
+            so.FindProperty("listRoot").objectReferenceValue = lRT;
+            so.FindProperty("rowTemplate").objectReferenceValue = row;
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            turnFeedback = fb;
+        }
+
+        /// <summary>게임 방식 설명. 처음 한 번 자동, 이후 Tab.</summary>
+        static void BuildBriefing(Transform parent)
+        {
+            var root = NewUI("Briefing", parent, typeof(Image), typeof(CanvasGroup), typeof(BriefingPanel));
+            Stretch(root, Vector2.zero, Vector2.zero);
+            root.GetComponent<Image>().color = new Color(0.02f, 0.02f, 0.03f, 0.93f);
+            var group = root.GetComponent<CanvasGroup>();
+            group.alpha = 0f;
+            group.blocksRaycasts = false;
+
+            var card = NewUI("Card", root.transform, typeof(Image));
+            var cRT = (RectTransform)card.transform;
+            cRT.anchorMin = cRT.anchorMax = new Vector2(0.5f, 0.5f);
+            cRT.pivot = new Vector2(0.5f, 0.5f);
+            cRT.sizeDelta = new Vector2(1180, 800);
+            var cImg = card.GetComponent<Image>();
+            cImg.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
+            cImg.type = Image.Type.Sliced;
+            cImg.color = new Color(0.09f, 0.09f, 0.11f, 0.98f);
+
+            var title = NewUI("Title", card.transform, typeof(TextMeshProUGUI));
+            var tRT = (RectTransform)title.transform;
+            tRT.anchorMin = new Vector2(0, 1); tRT.anchorMax = new Vector2(1, 1);
+            tRT.pivot = new Vector2(0.5f, 1);
+            tRT.offsetMin = new Vector2(56, 0); tRT.offsetMax = new Vector2(-56, 0);
+            tRT.anchoredPosition = new Vector2(0, -46);
+            tRT.sizeDelta = new Vector2(tRT.sizeDelta.x, 46);
+            var titleTMP = title.GetComponent<TextMeshProUGUI>();
+            StyleText(titleTMP, 32, new Color(0.84f, 0.81f, 0.74f));
+            titleTMP.alignment = TextAlignmentOptions.TopLeft;
+
+            var body = NewUI("Body", card.transform, typeof(TextMeshProUGUI));
+            var bRT = (RectTransform)body.transform;
+            bRT.anchorMin = new Vector2(0, 0); bRT.anchorMax = new Vector2(1, 1);
+            bRT.offsetMin = new Vector2(56, 130); bRT.offsetMax = new Vector2(-56, -112);
+            var bodyTMP = body.GetComponent<TextMeshProUGUI>();
+            StyleText(bodyTMP, 22, new Color(0.76f, 0.76f, 0.74f));
+            bodyTMP.richText = true;   // **강조** 를 볼드로 렌더링
+            bodyTMP.alignment = TextAlignmentOptions.TopLeft;
+            bodyTMP.lineSpacing = 8f;
+
+            var footer = NewUI("Footer", card.transform, typeof(TextMeshProUGUI));
+            var fRT = (RectTransform)footer.transform;
+            fRT.anchorMin = new Vector2(0, 0); fRT.anchorMax = new Vector2(1, 0);
+            fRT.pivot = new Vector2(0.5f, 0);
+            fRT.offsetMin = new Vector2(56, 0); fRT.offsetMax = new Vector2(-56, 0);
+            fRT.anchoredPosition = new Vector2(0, 82);
+            fRT.sizeDelta = new Vector2(fRT.sizeDelta.x, 34);
+            var footerTMP = footer.GetComponent<TextMeshProUGUI>();
+            StyleText(footerTMP, 21, new Color(0.58f, 0.62f, 0.70f));
+            footerTMP.alignment = TextAlignmentOptions.TopLeft;
+
+            var tmpRes = GetTMPResources();
+            var closeGO = TMP_DefaultControls.CreateButton(tmpRes);
+            closeGO.name = "CloseButton";
+            closeGO.transform.SetParent(card.transform, false);
+            var clRT = (RectTransform)closeGO.transform;
+            clRT.anchorMin = clRT.anchorMax = new Vector2(1, 0);
+            clRT.pivot = new Vector2(1, 0);
+            clRT.anchoredPosition = new Vector2(-56, 28);
+            clRT.sizeDelta = new Vector2(260, 60);
+            closeGO.GetComponent<Image>().color = new Color(0.20f, 0.18f, 0.16f, 0.95f);
+            var clLabel = closeGO.GetComponentInChildren<TextMeshProUGUI>();
+            StyleText(clLabel, 24, new Color(0.85f, 0.82f, 0.75f));
+            clLabel.text = "알겠다  (Tab)";
+
+            var panel = root.GetComponent<BriefingPanel>();
+            var so = new SerializedObject(panel);
+            so.FindProperty("group").objectReferenceValue = group;
+            so.FindProperty("titleText").objectReferenceValue = titleTMP;
+            so.FindProperty("bodyText").objectReferenceValue = bodyTMP;
+            so.FindProperty("footerText").objectReferenceValue = footerTMP;
+            so.FindProperty("closeButton").objectReferenceValue = closeGO.GetComponent<Button>();
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            briefingPanel = panel;
         }
 
         static void WireGame(SpeechBubble bubble, TMP_Text logTMP, TMP_InputField input,
@@ -460,9 +623,14 @@ namespace Interrogation.EditorTools
             if (pool == null)
                 Debug.LogError($"[Setup] {PoolPath} 를 찾지 못했다. dialoguePoolJson을 수동으로 연결할 것.");
 
+            var caseJson = AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/Resources/case_file.json");
+            if (caseJson == null)
+                Debug.LogError("[Setup] case_file.json 을 찾지 못했다. caseFileJson을 수동으로 연결할 것.");
+
             var soC = new SerializedObject(controller);
             soC.FindProperty("llm").objectReferenceValue = llm;
             soC.FindProperty("dialoguePoolJson").objectReferenceValue = pool;
+            soC.FindProperty("caseFileJson").objectReferenceValue = caseJson;
             soC.ApplyModifiedPropertiesWithoutUndo();
 
             var soU = new SerializedObject(ui);
@@ -477,6 +645,10 @@ namespace Interrogation.EditorTools
             soU.FindProperty("debugText").objectReferenceValue = dbgTMP;
             soU.FindProperty("introOverlay").objectReferenceValue = introGroup;
             soU.FindProperty("introText").objectReferenceValue = introTMP;
+            soU.FindProperty("feedback").objectReferenceValue = turnFeedback;
+            soU.FindProperty("briefing").objectReferenceValue = briefingPanel;
+            soU.FindProperty("retractButton").objectReferenceValue = retractButtonRef;
+            soU.FindProperty("retractLabel").objectReferenceValue = retractLabelTMP;
             soU.ApplyModifiedPropertiesWithoutUndo();
 
             Selection.activeGameObject = game;
