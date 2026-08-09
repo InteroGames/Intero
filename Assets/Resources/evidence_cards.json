@@ -1,0 +1,139 @@
+{
+  "_meta": {
+    "version": "세로 슬라이스 1 - 증거 카드 3장",
+    "rule": "카드는 답안지가 아니다. 플레이어 UI에는 objectiveFact와 detectiveClaim만 나간다. alternativeInterpretations / attackSurface / 수치는 코드 내부용이며 버튼·힌트·툴팁으로 절대 노출하지 말 것.",
+    "coverage": "3장이 서로 다른 대분류(Physical / Link / Digital)를 쓰고 대혐의 A/B/C에 하나씩 대응한다.",
+    "paths": "카드마다 타당한 반박 경로를 최소 3개 보장하고, 그 경로가 서로 다른 축을 최소 2개 포함한다.",
+    "slot": "slot 값이 Phase 1 잠입 결과와 이어진다. 슬롯이 exists=false면 그 카드는 아예 존재하지 않고, 그 라운드는 카드 없이 질문만으로 돈다."
+  },
+
+  "evidence": [
+    {
+      "id": "card_window",
+      "category": "Physical",
+      "charge": "A",
+      "slot": "physical_window",
+      "revealOrder": 1,
+      "sourceGroup": "scene_sweep",
+
+      "objectiveFact": "서재 창의 걸쇠가 바깥쪽에서 부러져 있었다. 창틀에 짙은 모직 섬유 몇 올이 걸려 있었다.",
+      "detectiveClaim": "자네가 그 창으로 들어갔다.",
+
+      "assertion": "이 걸쇠는 바깥에서 부러졌네. 안에서가 아니야.",
+      "quoteKeys": ["바깥에서 부러", "걸쇠", "안에서가 아니"],
+
+      "reliability": 7,
+      "relevance": 8,
+      "uniqueness": 3,
+      "proceduralRisk": 4,
+
+      "targetHypotheses": [
+        { "id": "A2", "relevance": 9 },
+        { "id": "A1", "relevance": 6 },
+        { "id": "A3", "relevance": 5 }
+      ],
+
+      "attackSurface": ["INFERENCE", "PROCEDURE", "TIMELINE"],
+      "alternativeInterpretations": [
+        "그 창은 전부터 걸쇠가 헐거웠고, 부러진 시점은 특정되지 않는다.",
+        "짙은 모직은 이 도시에서 가장 흔한 외투 감이다. 특정력이 없다.",
+        "섬유를 수거한 시각이 신고 접수보다 늦다. 그 사이 현장에 여러 사람이 드나들었다."
+      ],
+      "detectiveSensitivity": "수거 시각과 보관 사슬을 물으면 손이 멈춘다.",
+
+      "conflictKeys": ["그 집에 간 적 없", "근처에 간 적 없", "창 근처에 가지", "저택에 가본 적"],
+      "alignKeys": ["창을 넘었", "창으로 들어갔"],
+
+      "boosts": [
+        { "slot": "trace_glove", "uniqueness": 4, "reliability": 1 },
+        { "slot": "trace_footprint", "uniqueness": 2 }
+      ]
+    },
+
+    {
+      "id": "card_goods",
+      "category": "Link",
+      "charge": "B",
+      "slot": "link_goods",
+      "revealOrder": 1,
+      "sourceGroup": "pawn_ledger",
+
+      "objectiveFact": "시장통 전당포 장부에 금시계 한 점이 올라 있다. 일련번호가 도난품과 같다. 맡긴 날짜는 금요일.",
+      "detectiveClaim": "자네가 그것을 가져다 그 손에 넘겼다.",
+
+      "assertion": "장부에는 맡긴 사람 이름이 적혀 있지 않네.",
+      "quoteKeys": ["이름이 적혀 있지 않", "이름이 없", "맡긴 사람 이름", "이름은 안 적"],
+
+      "reliability": 8,
+      "relevance": 9,
+      "uniqueness": 6,
+      "proceduralRisk": 3,
+
+      "targetHypotheses": [
+        { "id": "B1", "relevance": 9 },
+        { "id": "C2", "relevance": 8 },
+        { "id": "B2", "relevance": 4 }
+      ],
+
+      "attackSurface": ["INFERENCE", "PROCEDURE", "SOURCE"],
+      "alternativeInterpretations": [
+        "소지나 유통은 절취가 아니다. 물건은 여러 손을 거쳐 그 장부에 닿을 수 있다.",
+        "전당포 장부는 전당포 주인이 스스로 적은 것이고, 그는 장물 취급을 감출 이유가 있다.",
+        "장부를 확보한 근거가 이 사건 영장 범위 안인지 확인되지 않았다."
+      ],
+      "detectiveSensitivity": "장부에 이름이 없다는 사실을 스스로 말한 뒤 그 말에 걸린다.",
+
+      "conflictKeys": ["전당포에 간 적 없", "시계를 본 적 없", "판 적 없", "넘긴 적 없", "물건을 만진 적"],
+      "alignKeys": ["전당포에 맡겼", "시계를 넘겼", "박 노인"],
+
+      "boosts": [
+        { "slot": "record_pass", "relevance": 1 },
+        { "slot": "testimony_maid", "uniqueness": 2 }
+      ]
+    },
+
+    {
+      "id": "card_ledger",
+      "category": "Digital",
+      "charge": "C",
+      "slot": "record_ledger",
+      "revealOrder": 1,
+      "sourceGroup": "house_records",
+
+      "objectiveFact": "저택 출입 장부. 목요일 밤 두 줄의 필체가 앞뒤와 다르다.",
+      "detectiveClaim": "자네가 기록을 손봤다.",
+      "alteredFact": "저택 경비실에서 출입 장부가 탔다. 재 속에 목요일 장 귀퉁이만 남았다.",
+      "alteredClaim": "자네가 기록을 태웠다.",
+
+      "assertion": "목요일 밤 출입 기록은 지금 한 줄도 남아 있지 않네.",
+      "quoteKeys": ["한 줄도 남아 있지 않", "기록이 없", "출입 기록은", "남아 있지 않다고"],
+      "assertionUndermines": "card_window",
+
+      "reliability": 6,
+      "relevance": 8,
+      "uniqueness": 4,
+      "proceduralRisk": 5,
+
+      "targetHypotheses": [
+        { "id": "C3", "relevance": 9 },
+        { "id": "C1", "relevance": 5 },
+        { "id": "A2", "relevance": 4 }
+      ],
+
+      "attackSurface": ["PROCEDURE", "TIMELINE", "SOURCE"],
+      "alternativeInterpretations": [
+        "장부는 저택 사람이 관리한다. 지울 이유가 있는 손이 집 안에도 있다.",
+        "필체가 다른 것은 그날 당직이 바뀌었기 때문일 수 있다.",
+        "탄 장부의 보관 사슬이 끊겼다. 언제 누가 재를 수거했는지 기록이 없다."
+      ],
+      "detectiveSensitivity": "기록을 맞춰보지 않고 사람을 가뒀던 과거가 이 카드에서 되살아난다.",
+
+      "conflictKeys": ["장부를 본 적 없", "경비실에 간 적 없", "불을 낸 적 없", "기록은 건드리지"],
+      "alignKeys": ["장부를 태웠", "기록을 없앴", "경비실에 들어갔"],
+
+      "boosts": [
+        { "slot": "physical_tool", "proceduralRisk": 1 }
+      ]
+    }
+  ]
+}

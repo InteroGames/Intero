@@ -24,6 +24,14 @@ namespace Interrogation
         bool open;
         bool built;
 
+        /// <summary>
+        /// 지금 돌고 있는 페이드. 새 페이드를 걸기 전에 반드시 멈춘다.
+        ///
+        /// 이게 없으면 열기와 닫기가 겹쳤을 때 두 코루틴이 매 프레임 alpha를
+        /// 반대로 밀어서 패널이 깜빡인다. Tab을 연타하거나 닫히는 중에 다시 열면 걸린다.
+        /// </summary>
+        Coroutine fade;
+
         void Awake()
         {
             group.alpha = 0f;
@@ -81,16 +89,17 @@ namespace Interrogation
 
         public IEnumerator Show()
         {
+            if (open) yield break;
+
             open = true;
             group.blocksRaycasts = true;
-            float t = 0f;
-            while (t < fadeTime)
-            {
-                t += Time.deltaTime;
-                group.alpha = Mathf.Clamp01(t / fadeTime);
-                yield return null;
-            }
-            group.alpha = 1f;
+
+            // 닫히는 중이었다면 그 페이드를 먼저 끊는다. 지금 알파에서 이어받는다.
+            if (fade != null) StopCoroutine(fade);
+            fade = StartCoroutine(FadeTo(1f));
+
+            // 페이드 핸들을 yield하지 않는다. 도중에 Close가 끊으면 영영 안 돌아온다.
+            yield return new WaitForSeconds(fadeTime);
         }
 
         /// <summary>플레이어가 닫을 때까지 기다린다. 첫 진입에서 쓴다.</summary>
@@ -104,20 +113,28 @@ namespace Interrogation
         {
             if (!open) return;
             open = false;
-            StartCoroutine(FadeOut());
+            group.blocksRaycasts = false;
+
+            if (fade != null) StopCoroutine(fade);
+            fade = StartCoroutine(FadeTo(0f));
         }
 
-        IEnumerator FadeOut()
+        /// <summary>지금 알파에서 목표까지. 중간에 끊겨도 다음 페이드가 그 자리에서 이어받는다.</summary>
+        IEnumerator FadeTo(float target)
         {
+            float from = group.alpha;
+            float dur = fadeTime * Mathf.Abs(target - from);   // 반쯤 열린 상태면 남은 만큼만
             float t = 0f;
-            while (t < fadeTime)
+
+            while (t < dur)
             {
                 t += Time.deltaTime;
-                group.alpha = 1f - Mathf.Clamp01(t / fadeTime);
+                group.alpha = Mathf.Lerp(from, target, t / dur);
                 yield return null;
             }
-            group.alpha = 0f;
-            group.blocksRaycasts = false;
+
+            group.alpha = target;
+            fade = null;
         }
     }
 }

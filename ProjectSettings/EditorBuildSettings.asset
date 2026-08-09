@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/Scenes/Interrogation.unity
-    guid: 26f2631f503a59649b4ca28b362b0bc2
+    path: Assets/Scenes/Heist.unity
+    guid: 0c56dfd413c3360429ce70e23edc00ba
+  - enabled: 1
+    path: Assets/Scenes/Inquiry.unity
+    guid: 59e671154c326c2479caf61c5f580201
   m_configObjects: {}

@@ -8,10 +8,15 @@
 
 핵심 훅: 판이 끝나도 형사는 기억한다. 3판째쯤 "자네는 늘 그렇게 시작하더군"이 나온다.
 
-## 마감
+## 상태 — 중단 (2026-08-10)
 
-**8월 10일.** 사전 과제 제출 (플레이 가능한 빌드 + 시연 영상 + 소개서 + 기술 문서).
-오늘 기준 남은 일수를 항상 의식할 것. 완성이 완벽보다 우선한다.
+8/10 사전 과제 마감 시점에서 멈췄다. **재개 예정은 2026년 9~10월.**
+아래 "D1~D6", "게이트", "남은 일수" 류의 일정 표현은 전부 그 마감 기준의 잔재다.
+**남은 일수를 계산하거나 급하게 잘라내지 말 것.** 재개 시점의 우선순위는 `README.md`의
+"다시 시작할 때"가 기준이다.
+
+현재 메인 경로는 **2페이즈 구조(잠입 → 취조)**다. 상세 설계는 `Assets/Docs/2페이즈_설계.md`.
+기존 단일 취조실은 손대지 않았고 그대로 컴파일된다 — 되돌아갈 자리로 남겨둔 것이다.
 
 ## 환경
 
@@ -19,7 +24,8 @@
 - 패키지: `com.unity.nuget.newtonsoft-json`, `com.unity.ugui`(TMP 포함), `com.coplaydev.unity-mcp` — 전부 manifest에 등록 완료
 - **MCP for Unity**: HTTP 모드, `http://127.0.0.1:8080/mcp`. 에디터가 켜져 있고 `Window > MCP for Unity` 서버가 Running이어야 동작한다. 안 붙으면 그 창부터 확인.
 - **한글 폰트**: TMP 기본 폰트는 한글이 전부 □로 나온다. 모든 TMP 텍스트는 반드시 `Assets/Fonts/Malgun SDF.asset` (다이내믹, 맑은 고딕)을 쓸 것. 새 텍스트를 만들 때마다 적용해야 한다.
-- **씬 자동 생성**: `Tools > Interrogation > Setup Scene` 메뉴 하나로 D2 배선 전체(Canvas, 로그, 입력창, 게이지, `_Game` 레퍼런스 연결)가 만들어진다. 소스는 `Assets/Editor/InterrogationSceneSetup.cs`. **기존 씬을 덮어쓰므로 씬을 손으로 수정한 뒤에는 다시 돌리지 말 것.** 키는 씬 밖에 있으므로 재생성해도 안 날아간다.
+- **씬 자동 생성**: 현재 기본 경로는 `Tools > Interrogation > Setup Phases (Heist + Inquiry)` (소스 `Assets/Editor/PhaseSceneSetup.cs`). 레거시 단일 취조실은 `Tools > Interrogation > Setup Scene` (`InterrogationSceneSetup.cs`). **기존 씬을 덮어쓰므로 씬을 손으로 수정한 뒤에는 다시 돌리지 말 것.** 키는 씬 밖에 있으므로 재생성해도 안 날아간다.
+- **검증**: `Tools > Interrogation > Validate Phases` — 배선 누락·카드 정합성·잠입 결과 반영을 찍어준다. 머지 전에 돌린다.
 - **플레이 로그**: 실행할 때마다 `PlayLogs/session_*.log`에 질문·입력·태틱·게이지·LLM 실패 원인이 남는다. **게임이 이상하면 추측하지 말고 이 파일부터 읽을 것.**
 
 ---
@@ -168,7 +174,11 @@ LLM이 하는 일은 **자연어 → 데이터** 변환 하나뿐이다.
 
 ## 파일 구조
 
+전체 목록은 `README.md`의 "구조"가 최신이다. 아래는 레거시 단일 취조실 기준으로 남겨둔다.
+
 ```
+Assets/Scripts/Heist/          Phase 1 (잠입)
+Assets/Scripts/Inquiry/        Phase 2 (취조) - 판정 전부 InquiryJudge
 Assets/Scripts/
   InterrogationState.cs      상태 모델, 열거형, 임계값
   Judgment.cs                모순 검출 + 게이지 계산 (코드 판정 전부)

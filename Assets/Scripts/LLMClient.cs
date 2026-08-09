@@ -156,6 +156,22 @@ namespace Interrogation
             cb(line.Trim());
         }
 
+        /// <summary>
+        /// Phase 2(Inquiry)가 자기 프롬프트로 같은 HTTP 경로를 쓴다.
+        /// 여기서도 판정은 하지 않는다 - 추출과 대사 생성뿐이다.
+        /// 실패하면 null을 준다. 호출자는 반드시 폴백을 가지고 있어야 한다.
+        /// </summary>
+        public IEnumerator Ask(string system, string user, int maxTokens, float temperature,
+                               Action<string> cb)
+        {
+            if (!EnsureKey())
+            {
+                TranscriptLog.Write($"  [LLM] {provider} 키 없음 ({ApiKeyStore.KeyFilePath}) - 폴백");
+                cb(null); yield break;
+            }
+            yield return Post(system, user, maxTokens, temperature, cb);
+        }
+
         bool EnsureKey()
         {
             if (!string.IsNullOrWhiteSpace(apiKeyOverride)) { apiKey = apiKeyOverride.Trim(); return true; }
