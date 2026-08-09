@@ -32,7 +32,7 @@
 
 ## 협업 (3인)
 
-리포: `https://github.com/jasonwpgml/Intero.git`
+리포: `https://github.com/InteroGames/Intero.git` (구 `jasonwpgml/Intero` — 리다이렉트되지만 리모트를 새 주소로 바꿔둘 것)
 
 ### 처음 클론했을 때 (팀원 각자 1회)
 
