@@ -38,7 +38,7 @@ namespace Interrogation
         [Header("오프닝")]
         [SerializeField] CanvasGroup introOverlay;   // 암전 + 내레이션
         [SerializeField] TMP_Text introText;
-        [SerializeField] float introLineHold = 2.4f;
+        [SerializeField] float introLineHold = 2.0f;
         [SerializeField] bool playIntro = true;
 
         readonly StringBuilder log = new StringBuilder();
